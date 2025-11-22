@@ -1,0 +1,17 @@
+{
+  "categories": [
+    "groceries",
+    "food delivery",
+    "restaurants/drinks",
+    "shopping",
+    "utilities",
+    "transportation",
+    "convenience",
+    "entertainment",
+    "medical",
+    "travel"
+  ],
+  "reccuring_expenses": {
+    "rent": 3682.25
+  }
+}

@@ -48,3 +48,24 @@ class ReconciliationSessionTest(unittest.TestCase):
             self.assertTrue(tmp_path.exists())
         finally:
             tmp_path.unlink(missing_ok=True)
+
+    def test_load_transactions_parses_csv(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            csv_path = Path(tmpdir) / "activity.csv"
+            csv_path.write_text(
+                "Date,Description,Amount\n"
+                "09/01/2025,Test Merchant,123.45\n"
+                "09/02/2025,Refund Merchant,-10.00\n",
+                encoding="utf-8",
+            )
+            config = BudgetSheetConfig(
+                workbook_path=Path(tmpdir) / "budget.xlsx",
+                month="2025-09",
+            )
+            session = ReconciliationSession(config)
+            session.load_transactions([csv_path])
+
+            self.assertEqual(len(session.expenses), 2)
+            first = session.expenses[0]
+            self.assertEqual(first.description, "Test Merchant")
+            self.assertEqual(first.amount, 123.45)

@@ -5,6 +5,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Iterable, List, Mapping, MutableMapping, Optional, Sequence
 
+import csv
+
 from .writer import BudgetSheetWriter, SheetFormatKeeper
 
 
@@ -16,7 +18,6 @@ class BudgetSheetConfig:
     month: str
     categories: Sequence[str] = field(default_factory=list)
     recurring_expectations: Mapping[str, float] = field(default_factory=dict)
-    prompt_user_before_commit: bool = True
 
 
 @dataclass
@@ -42,47 +43,68 @@ class RecurringCheckResult:
     satisfied: MutableMapping[str, float]
 
 
-ConfirmCallback = Callable[["BudgetSheetConfig"], bool]
-
-
 class ReconciliationSession:
     """High-level orchestration for collecting and reconciling expenses."""
 
     def __init__(
         self,
         config: BudgetSheetConfig,
-        confirm_callback: Optional[ConfirmCallback] = None,
     ) -> None:
         self.config = config
         self.expenses: List[ExpenseRecord] = []
         self.format_keeper = SheetFormatKeeper(config.workbook_path)
-        self._confirm_callback = confirm_callback
-
-    def confirm_budget_sheet(self) -> bool:
-        """Confirm with the user before mutating the budget workbook."""
-
-        if not self.config.prompt_user_before_commit:
-            return True
-
-        if not self._confirm_callback:
-            raise RuntimeError(
-                "No confirmation callback registered for budget sheet edits."
-            )
-
-        return self._confirm_callback(self.config)
 
     def load_transactions(self, csv_files: Iterable[Path]) -> None:
         """Read the CSV inputs and expand the session's expense list."""
 
         for csv_path in csv_files:
-            self.expenses.append(
-                ExpenseRecord(
-                    date=datetime.date.today(),
-                    description=f"Stub from {csv_path.name}",
-                    amount=0.0,
-                    source_file=csv_path,
+            self.expenses.extend(self._parse_csv(csv_path))
+
+    def _parse_csv(self, csv_path: Path) -> List[ExpenseRecord]:
+        """Convert each row from the CSV into an expense record."""
+
+        records: List[ExpenseRecord] = []
+        with csv_path.open(newline="", encoding="utf-8") as csvfile:
+            reader = csv.DictReader(csvfile)
+            for row in reader:
+                date_val = row.get("Date", "").strip()
+                description = row.get("Description", "").strip()
+                amount_val = row.get("Amount", "").strip()
+
+                date_obj = self._parse_date(date_val)
+                amount = self._parse_amount(amount_val)
+
+                records.append(
+                    ExpenseRecord(
+                        date=date_obj,
+                        description=description,
+                        amount=amount,
+                        source_file=csv_path,
+                    )
                 )
-            )
+
+        return records
+
+    @staticmethod
+    def _parse_date(value: str) -> datetime.date:
+        """Try to parse dates from the CSV (e.g., mm/dd/YYYY)."""
+
+        for fmt in ("%m/%d/%Y", "%Y-%m-%d"):
+            try:
+                return datetime.datetime.strptime(value, fmt).date()
+            except ValueError:
+                continue
+        raise ValueError(f"Unable to parse date '{value}'")
+
+    @staticmethod
+    def _parse_amount(value: str) -> float:
+        """Normalize numeric strings that may include commas or parentheses."""
+
+        normalized = value.replace(",", "")
+        if normalized.startswith("(") and normalized.endswith(")"):
+            normalized = f"-{normalized[1:-1]}"
+
+        return float(normalized)
 
     def classify_expense(self, record: ExpenseRecord, category: str) -> None:
         """Assign a category and track whether additional flags apply."""
@@ -114,6 +136,19 @@ class ReconciliationSession:
         for key, expected in self.config.recurring_expectations.items():
             satisfied[key] = 0.0
             missing[key] = expected
+
+        for record in self.expenses:
+            key = record.recurring_key
+            if not key:
+                continue
+            if key not in satisfied:
+                continue
+            if record.is_payment:
+                continue
+
+            satisfied[key] += record.amount
+            missing[key] = self.config.recurring_expectations[key] - satisfied[key]
+
         return RecurringCheckResult(missing=missing, satisfied=satisfied)
 
     def write_budget_sheet(self) -> Path:

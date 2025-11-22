@@ -2,8 +2,11 @@ This is a cli used to populate budget sheets in ~/Documents/'/Users/nsv/Document
 
 usage: cli --workbook-path PATH [OPTIONS] month csv_files
 
-The `--workbook-path` option is now required so you explicitly point at the workbook you intend to update,
-and `--yes` skips the confirmation prompt once you are comfortable with a particular workbook/month.
+The `--workbook-path` option is required so you explicitly point at the workbook you intend to update,
+`--yes` skips the confirmation prompt once you are comfortable with a particular workbook/month,
+and `--config PATH` lets you supply a JSON file that describes available categories and recurring expectations.
+
+The interactive classification flow walks through each CSV row, prompting you to pick a category, mark incomes/misc/payments, and record a recurring key if appropriate. Once all records are classified, the CLI summarizes recurring expectations before writing the monthly sheet.
 
 It should ask the user to confirm the budget sheet path and month before making changes.
 
