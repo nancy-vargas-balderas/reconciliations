@@ -147,7 +147,7 @@ def _load_config(config_path: Optional[Path]) -> Tuple[List[str], List[str]]:
     """Read the JSON config file describing categories and recurring expectations."""
 
     if config_path is None:
-        return [], {}
+        return [], []
 
     with config_path.open(encoding="utf-8") as fp:
         raw = json.load(fp)
@@ -158,12 +158,20 @@ def _load_config(config_path: Optional[Path]) -> Tuple[List[str], List[str]]:
     if "categories" in raw:
         if not isinstance(raw["categories"], list):
             raise click.BadParameter("Config: 'categories' must be a list.")
-        categories = [str(item).strip() for item in raw["categories"] if item]
+        categories = [
+            cleaned
+            for item in raw["categories"]
+            if (cleaned := str(item).strip())
+        ]
 
     if "recurring_expenses" in raw:
         if not isinstance(raw["recurring_expenses"], list):
             raise click.BadParameter("Config: 'recurring_expenses' must be a list.")
-        recurring = [str(item).strip() for item in raw["recurring_expenses"] if item]
+        recurring = [
+            cleaned
+            for item in raw["recurring_expenses"]
+            if (cleaned := str(item).strip())
+        ]
 
     reserved_for_config = BASE_RESERVED_CATEGORIES + [RECURRING_RESERVED_CATEGORY]
     for name in categories:
