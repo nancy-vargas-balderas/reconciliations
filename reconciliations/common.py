@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
+from pathlib import Path
+from typing import Optional
 
 
 @dataclass
 class ExpenseRecord:
     """Represents a single transaction that needs reconciliation."""
 
-    date: datetime.date
+    date: date
     description: str
     amount: float
     source_file: Optional[Path] = None

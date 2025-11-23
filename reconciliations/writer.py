@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence, Tuple, Callable
-from enum import Enum
+from typing import Sequence
 
 import xlsxwriter
 from .common import ExpenseRecord
@@ -51,7 +49,7 @@ class BudgetSheetWriter:
         worksheet = self.workbook.add_worksheet(name=month)
         self._apply_template(worksheet)
 
-        total_income_fn="=0"
+        total_income_fn = "=0"
 
         starting_misc_row = 6
         starting_recurring_row = 6
@@ -70,7 +68,7 @@ class BudgetSheetWriter:
                 continue
             
             if e.is_income:
-                total_income_fn += f"+{amount}"
+                total_income_fn += f"+{e.amount}"
                 continue
 
             if e.is_misc:
@@ -121,7 +119,6 @@ class BudgetSheetWriter:
         purchases_col, purchases_total_cell = write_total(purchases_row, purchases_col, starting_purchases_row, 3)
  
         #calculate total spending and balance
-        worksheet.write_formula("E4", f"=C4-F4", totals_format)
+        worksheet.write_formula("E4", "=C4-F4", totals_format)
         worksheet.write_formula("F4", f"=SUM({misc_total_cell},{purchases_total_cell})", totals_format)
         self.workbook.close()
-

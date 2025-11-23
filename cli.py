@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, List, Optional, Tuple
 
 try:
     import readline
@@ -11,7 +11,7 @@ except ImportError:
 
 import click
 
-from reconciliations import BudgetSheetConfig, ExpenseRecord, ReconciliationSession
+from reconciliations import BudgetSheetConfig, ReconciliationSession
 
 BASE_RESERVED_CATEGORIES = ["Income", "Miscellaneous", "Payment"]
 RECURRING_RESERVED_CATEGORY = "Recurring"
@@ -153,7 +153,7 @@ def _load_config(config_path: Optional[Path]) -> Tuple[List[str], List[str]]:
         raw = json.load(fp)
 
     categories: List[str] = []
-    recurring: List[str] = {}
+    recurring: List[str] = []
 
     if "categories" in raw:
         if not isinstance(raw["categories"], list):

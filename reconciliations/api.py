@@ -3,7 +3,7 @@ from __future__ import annotations
 import datetime
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Iterable, List, Mapping, MutableMapping, Optional, Sequence
+from typing import Iterable, List, MutableMapping, Sequence
 
 import csv
 
