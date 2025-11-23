@@ -6,21 +6,7 @@ from typing import Sequence, Tuple, Callable
 from enum import Enum
 
 import xlsxwriter
-
-
-@dataclass
-class SectionName(Enum):
-    PURCHASES=0
-    INCOME=1
-    MISC=2
-    PAYMENTS=3
-    RECURRING_EXPENSES=4
-
-
-@dataclass
-class Section:
-    name: SectionName
-    membership_fn: Callable[Any, bool]
+from .common import ExpenseRecord
 
 
 class BudgetSheetWriter:
@@ -59,7 +45,7 @@ class BudgetSheetWriter:
         worksheet.write_string("K4", "Description", col_name_format)  
         worksheet.write_string("L4", "Amount", col_name_format)
 
-    def populate(self, expenses: Sequence["ExpenseRecord"], month: str) -> None:
+    def populate(self, expenses: Sequence[ExpenseRecord], month: str) -> None:
         """Write the provided expenses into a monthly sheet placeholder."""
 
         worksheet = self.workbook.add_worksheet(name=month)
@@ -119,31 +105,20 @@ class BudgetSheetWriter:
         worksheet.write("B4", "", totals_format)
         worksheet.write_formula("C4", total_income_fn, totals_format)
 
-        worksheet.write(recurring_row, recurring_col, "total", totals_format)
-        recurring_col += 1
-        final_recurring_cell = xlsxwriter.utility.xl_rowcol_to_cell(recurring_row-1, recurring_col) if recurring_row != starting_recurring_row else None
-        if final_recurring_cell:
-            worksheet.write_formula(recurring_row, recurring_col, f"=SUM({xlsxwriter.utility.xl_rowcol_to_cell(starting_recurring_row, recurring_col)}:{final_recurring_cell})", totals_format) 
-        else:
-            worksheet.write(recurring_row, recurring_col, 0, totals_format)
+        def write_total(row, col, start_row, col_increase_amt):
+            worksheet.write(row, col, "total", totals_format)
+            col += col_increase_amt
+            final_cell = xlsxwriter.utility.xl_rowcol_to_cell(row-1, col) if row != start_row else None
+            total_cell = xlsxwriter.utility.xl_rowcol_to_cell(row, col) 
+            if final_cell:
+                worksheet.write_formula(row, col, f"=SUM({xlsxwriter.utility.xl_rowcol_to_cell(start_row, col)}:{final_cell})", totals_format) 
+            else:
+                worksheet.write(row, col, 0, totals_format)
+            return col, total_cell
 
-        worksheet.write(misc_row, misc_col, "total", totals_format)
-        misc_col += 1
-        final_misc_cell = xlsxwriter.utility.xl_rowcol_to_cell(misc_row-1, misc_col) if misc_row != starting_misc_row else None
-        misc_total_cell = xlsxwriter.utility.xl_rowcol_to_cell(misc_row, misc_col) 
-        if final_misc_cell:
-            worksheet.write_formula(misc_total_cell, f"=SUM({xlsxwriter.utility.xl_rowcol_to_cell(starting_misc_row, misc_col)}:{final_misc_cell})", totals_format) 
-        else:
-            worksheet.write(misc_total_cell, 0, totals_format)
- 
-        worksheet.write(purchases_row, purchases_col, "total", totals_format)
-        purchases_col += 3
-        final_purchases_cell = xlsxwriter.utility.xl_rowcol_to_cell(purchases_row-1, purchases_col) if purchases_row != starting_purchases_row else None
-        purchases_total_cell = xlsxwriter.utility.xl_rowcol_to_cell(purchases_row, purchases_col)
-        if final_purchases_cell:
-            worksheet.write_formula(purchases_total_cell, f"=SUM({xlsxwriter.utility.xl_rowcol_to_cell(starting_purchases_row, purchases_col)}:{final_purchases_cell})", totals_format) 
-        else:
-            worksheet.write(purchases_total_cell, 0, totals_format)
+        recurring_col, _ = write_total(recurring_row, recurring_col, starting_recurring_row, 1)
+        misc_col, misc_total_cell = write_total(misc_row, misc_col, starting_misc_row, 1)
+        purchases_col, purchases_total_cell = write_total(purchases_row, purchases_col, starting_purchases_row, 3)
  
         #calculate total spending and balance
         worksheet.write_formula("E4", f"=C4-F4", totals_format)

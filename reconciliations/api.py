@@ -8,7 +8,7 @@ from typing import Callable, Iterable, List, Mapping, MutableMapping, Optional, 
 import csv
 
 from .writer import BudgetSheetWriter
-
+from .common import ExpenseRecord
 
 @dataclass
 class BudgetSheetConfig:
@@ -17,22 +17,7 @@ class BudgetSheetConfig:
     workbook_path: Path
     month: str
     categories: Sequence[str] = field(default_factory=list)
-    recurring_expenses: Mapping[str, float] = field(default_factory=dict)
-
-
-@dataclass
-class ExpenseRecord:
-    """Represents a single transaction that needs reconciliation."""
-
-    date: datetime.date
-    description: str
-    amount: float
-    source_file: Optional[Path] = None
-    category: Optional[str] = None
-    is_income: bool = False
-    is_misc: bool = False
-    is_payment: bool = False
-    recurring_key: Optional[str] = None
+    recurring_expenses: Sequence[str] = field(default_factory=list)
 
 
 @dataclass
@@ -104,51 +89,6 @@ class ReconciliationSession:
             normalized = f"-{normalized[1:-1]}"
 
         return float(normalized)
-
-    def classify_expense(self, record: ExpenseRecord, category: str) -> None:
-        """Assign a category and track whether additional flags apply."""
-
-        record.category = category
-
-    def mark_as_income(self, record: ExpenseRecord) -> None:
-        """Mark an expense that should actually be treated as income."""
-
-        record.is_income = True
-        record.is_misc = False
-        record.is_payment = False
-
-    def mark_as_miscellaneous(self, record: ExpenseRecord) -> None:
-        """Flag high-impact miscellaneous expenses that break the regular pattern."""
-
-        record.is_misc = True
-
-    def mark_as_payment(self, record: ExpenseRecord) -> None:
-        """Treat the transaction as a payment that should not affect totals."""
-
-        record.is_payment = True
-
-    def build_recurring_report(self) -> RecurringCheckResult:
-        """Compare configured recurring targets with the loaded records."""
-
-        missing: MutableMapping[str, float] = {}
-        satisfied: MutableMapping[str, float] = {}
-        for key, expected in self.config.recurring_expenses.items():
-            satisfied[key] = 0.0
-            missing[key] = expected
-
-        for record in self.expenses:
-            key = record.recurring_key
-            if not key:
-                continue
-            if key not in satisfied:
-                continue
-            if record.is_payment:
-                continue
-
-            satisfied[key] += record.amount
-            missing[key] = self.config.recurring_expenses[key] - satisfied[key]
-
-        return RecurringCheckResult(missing=missing, satisfied=satisfied)
 
     def write_budget_sheet(self) -> Path:
         """Persist the reconciliation results to the workbook."""

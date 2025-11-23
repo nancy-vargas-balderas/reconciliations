@@ -11,7 +11,8 @@
     "medical",
     "travel"
   ],
-  "reccuring_expenses": {
-    "rent": 3682.25
-  }
+  "recurring_expenses": [
+    "rent",
+    "icloud"
+  ]
 }
