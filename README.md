@@ -1,4 +1,4 @@
-<img width="722" height="635" alt="Screenshot 2025-11-23 at 2 17 57 AM" src="https://github.com/user-attachments/assets/01288c6d-3525-4bc0-9b7a-2faa5275ee75" />This is a cli used to categorize credit card statements into Excel worksheets. It is interactive and cutomizable.
+This is a cli used to categorize credit card statements into Excel worksheets. It is interactive and cutomizable.
 
 usage: `cli --workbook-path PATH [OPTIONS] month csv_files`
 
