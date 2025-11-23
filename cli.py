@@ -40,10 +40,10 @@ def _load_config(config_path: Optional[Path]) -> Tuple[List[str], Dict[str, floa
         if any(name.lower() == reserved.lower() for reserved in RESERVED_CATEGORIES):
             raise click.BadParameter(f"Config: '{name}' is reserved and cannot be defined.")
 
-    if "recurring_expectations" in raw:
-        if not isinstance(raw["recurring_expectations"], dict):
-            raise click.BadParameter("Config: 'recurring_expectations' must be a mapping.")
-        for key, value in raw["recurring_expectations"].items():
+    if "recurring_expenses" in raw:
+        if not isinstance(raw["recurring_expenses"], dict):
+            raise click.BadParameter("Config: 'recurring_expenses' must be a mapping.")
+        for key, value in raw["recurring_expenses"].items():
             if not key or not isinstance(key, str):
                 raise click.BadParameter("Config: recurring keys must be non-empty strings.")
             try:
@@ -151,10 +151,10 @@ def _interactive_classification(session: ReconciliationSession) -> None:
             record.recurring_key = recurring_key
 
 
-def _check_recurring_expectations(session: ReconciliationSession) -> bool:
+def _check_recurring_expenses(session: ReconciliationSession) -> bool:
     """Warn if recurring expectations are not satisfied yet."""
 
-    if not session.config.recurring_expectations:
+    if not session.config.recurring_expenses:
         return True
 
     report = session.build_recurring_report()
@@ -218,13 +218,13 @@ def cli(
         raise click.UsageError("At least one CSV file is required.")
 
     workbook_path = workbook_path.expanduser() 
-    categories, recurring_expectations = _load_config(config_path)
+    categories, recurring_expenses = _load_config(config_path)
 
     config = BudgetSheetConfig(
         workbook_path=workbook_path,
         month=month,
         categories=categories,
-        recurring_expectations=recurring_expectations,
+        recurring_expenses=recurring_expenses,
     )
 
     if not yes and not click.confirm(f"Write changes to {config.workbook_path} for {config.month}?", default=False):
@@ -234,7 +234,7 @@ def cli(
     session.load_transactions(csv_files)
     _interactive_classification(session)
 
-    if not _check_recurring_expectations(session):
+    if not _check_recurring_expenses(session):
         click.echo("Commit aborted due to recurring expectation validation.")
         raise click.Abort()
 

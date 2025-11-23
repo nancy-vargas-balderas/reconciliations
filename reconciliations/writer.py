@@ -2,88 +2,151 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence, Tuple
+from typing import Sequence, Tuple, Callable
+from enum import Enum
 
 import xlsxwriter
 
 
 @dataclass
-class SheetFormatKeeper:
-    """Remembers where the existing budget workbook lives for reuse."""
-
-    workbook_path: Path
-
-    def get_template(self) -> Path:
-        """Return the path that will be used when writing updates."""
-
-        return self.workbook_path
+class SectionName(Enum):
+    PURCHASES=0
+    INCOME=1
+    MISC=2
+    PAYMENTS=3
+    RECURRING_EXPENSES=4
 
 
-SECTION_DEFS = [
-    ("Regular", lambda record: not record.is_income and not record.is_misc and not record.recurring_key),
-    ("Income", lambda record: record.is_income),
-    ("Miscellaneous", lambda record: record.is_misc),
-    ("Recurring", lambda record: bool(record.recurring_key)),
-]
+@dataclass
+class Section:
+    name: SectionName
+    membership_fn: Callable[Any, bool]
 
 
 class BudgetSheetWriter:
     """Lightweight xlsxwriter-backed helper that preserves workbook location."""
 
-    def __init__(self, template_path: Path) -> None:
-        self.template_path = template_path
-        self.target_path = template_path
+    def __init__(self, workbook_path: Path) -> None:
+        self.workbook = xlsxwriter.Workbook(str(workbook_path))
+
+    def _apply_template(self, worksheet: xlsxwriter.Worksheet) -> None:
+        merge_format = self.workbook.add_format({
+            "bold": True,
+            "align": "center",
+            "border": 1
+        })
+
+        #net income
+        worksheet.merge_range("B3:C3", "Net Income", merge_format)
+
+        #balance and total spending
+        worksheet.write_string("E3", "Balance", merge_format) 
+        worksheet.write_string("F3", "Total Spending", merge_format)
+
+        # #recurring expenses
+        worksheet.merge_range("B6:C6", "Recurring Expenses", merge_format)
+
+        # #Miscellaneous
+        worksheet.merge_range("E6:F6", "Miscellaneous", merge_format)
+
+        # #purchases
+        col_name_format = self.workbook.add_format({
+            "border": 1
+        })
+        worksheet.merge_range("I3:L3", "Purchases", merge_format)
+        worksheet.write_string("I4", "Date", col_name_format) 
+        worksheet.write_string("J4", "Category", col_name_format) 
+        worksheet.write_string("K4", "Description", col_name_format)  
+        worksheet.write_string("L4", "Amount", col_name_format)
 
     def populate(self, expenses: Sequence["ExpenseRecord"], month: str) -> None:
         """Write the provided expenses into a monthly sheet placeholder."""
 
-        workbook = xlsxwriter.Workbook(str(self.target_path))
-        worksheet = workbook.add_worksheet(name=month)
+        worksheet = self.workbook.add_worksheet(name=month)
+        self._apply_template(worksheet)
 
-        ROW_HEADERS = ["Date", "Description", "Amount", "Category"]
+        total_income_fn="=0"
 
-        current_row = 0
-        for section_name, records in self._sectioned_expenses(expenses):
-            if not records:
+        starting_misc_row = 6
+        starting_recurring_row = 6
+        starting_purchases_row = 4
+
+        misc_row, misc_col = starting_misc_row,4
+        recurring_row, recurring_col = starting_recurring_row,1
+        purchases_row, purchases_col = starting_purchases_row,8
+
+        row_format = self.workbook.add_format({
+            "border": 1
+        })
+        
+        for e in expenses:
+            if e.is_payment:
+                continue
+            
+            if e.is_income:
+                total_income_fn += f"+{amount}"
                 continue
 
-            worksheet.write(current_row, 0, section_name)
-            current_row += 1
-            worksheet.write_row(current_row, 0, ROW_HEADERS)
-            current_row += 1
+            if e.is_misc:
+                worksheet.write_row(misc_row, misc_col, (e.description, e.amount), row_format)
+                misc_row += 1
+                continue
 
-            section_total = 0.0
-            for record in records:
-                worksheet.write_row(
-                    current_row,
-                    0,
-                    [
-                        record.date.isoformat(),
-                        record.description,
-                        record.amount,
-                        record.category or "",
-                    ],
-                )
-                section_total += record.amount
-                current_row += 1
+            if e.recurring_key:
+                worksheet.write_row(recurring_row, recurring_col, (e.recurring_key, e.amount), row_format)
+                recurring_row += 1
+                continue 
 
             worksheet.write_row(
-                current_row,
-                0,
-                ["Total", "", section_total, ""],
+                purchases_row,
+                purchases_col,
+                [
+                    e.date.isoformat(),
+                    e.category,
+                    e.description,
+                    e.amount,
+                ],
+                row_format
             )
-            current_row += 1
-            current_row += 1  # blank line between sections
+            purchases_row += 1
+        
+        #add totals
+        totals_format = self.workbook.add_format({
+            "bold": True,
+            "border": 1
+        })
+        
+        worksheet.write("B4", "", totals_format)
+        worksheet.write_formula("C4", total_income_fn, totals_format)
 
-        workbook.close()
+        worksheet.write(recurring_row, recurring_col, "total", totals_format)
+        recurring_col += 1
+        final_recurring_cell = xlsxwriter.utility.xl_rowcol_to_cell(recurring_row-1, recurring_col) if recurring_row != starting_recurring_row else None
+        if final_recurring_cell:
+            worksheet.write_formula(recurring_row, recurring_col, f"=SUM({xlsxwriter.utility.xl_rowcol_to_cell(starting_recurring_row, recurring_col)}:{final_recurring_cell})", totals_format) 
+        else:
+            worksheet.write(recurring_row, recurring_col, 0, totals_format)
 
-    def _sectioned_expenses(self, expenses: Sequence["ExpenseRecord"]) -> Sequence[tuple[str, list["ExpenseRecord"]]]:
-        remaining = list(expenses)
-        sections: list[tuple[str, list["ExpenseRecord"]]] = []
+        worksheet.write(misc_row, misc_col, "total", totals_format)
+        misc_col += 1
+        final_misc_cell = xlsxwriter.utility.xl_rowcol_to_cell(misc_row-1, misc_col) if misc_row != starting_misc_row else None
+        misc_total_cell = xlsxwriter.utility.xl_rowcol_to_cell(misc_row, misc_col) 
+        if final_misc_cell:
+            worksheet.write_formula(misc_total_cell, f"=SUM({xlsxwriter.utility.xl_rowcol_to_cell(starting_misc_row, misc_col)}:{final_misc_cell})", totals_format) 
+        else:
+            worksheet.write(misc_total_cell, 0, totals_format)
+ 
+        worksheet.write(purchases_row, purchases_col, "total", totals_format)
+        purchases_col += 3
+        final_purchases_cell = xlsxwriter.utility.xl_rowcol_to_cell(purchases_row-1, purchases_col) if purchases_row != starting_purchases_row else None
+        purchases_total_cell = xlsxwriter.utility.xl_rowcol_to_cell(purchases_row, purchases_col)
+        if final_purchases_cell:
+            worksheet.write_formula(purchases_total_cell, f"=SUM({xlsxwriter.utility.xl_rowcol_to_cell(starting_purchases_row, purchases_col)}:{final_purchases_cell})", totals_format) 
+        else:
+            worksheet.write(purchases_total_cell, 0, totals_format)
+ 
+        #calculate total spending and balance
+        worksheet.write_formula("E4", f"=C4-F4", totals_format)
+        worksheet.write_formula("F4", f"=SUM({misc_total_cell},{purchases_total_cell})", totals_format)
+        self.workbook.close()
 
-        for name, predicate in SECTION_DEFS:
-            section_records = [record for record in remaining if predicate(record)]
-            remaining = [record for record in remaining if record not in section_records]
-            sections.append((name, section_records))
-
-        return sections

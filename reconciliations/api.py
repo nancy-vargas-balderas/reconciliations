@@ -7,7 +7,7 @@ from typing import Callable, Iterable, List, Mapping, MutableMapping, Optional, 
 
 import csv
 
-from .writer import BudgetSheetWriter, SheetFormatKeeper
+from .writer import BudgetSheetWriter
 
 
 @dataclass
@@ -17,7 +17,7 @@ class BudgetSheetConfig:
     workbook_path: Path
     month: str
     categories: Sequence[str] = field(default_factory=list)
-    recurring_expectations: Mapping[str, float] = field(default_factory=dict)
+    recurring_expenses: Mapping[str, float] = field(default_factory=dict)
 
 
 @dataclass
@@ -52,7 +52,6 @@ class ReconciliationSession:
     ) -> None:
         self.config = config
         self.expenses: List[ExpenseRecord] = []
-        self.format_keeper = SheetFormatKeeper(config.workbook_path)
 
     def load_transactions(self, csv_files: Iterable[Path]) -> None:
         """Read the CSV inputs and expand the session's expense list."""
@@ -133,7 +132,7 @@ class ReconciliationSession:
 
         missing: MutableMapping[str, float] = {}
         satisfied: MutableMapping[str, float] = {}
-        for key, expected in self.config.recurring_expectations.items():
+        for key, expected in self.config.recurring_expenses.items():
             satisfied[key] = 0.0
             missing[key] = expected
 
@@ -147,16 +146,16 @@ class ReconciliationSession:
                 continue
 
             satisfied[key] += record.amount
-            missing[key] = self.config.recurring_expectations[key] - satisfied[key]
+            missing[key] = self.config.recurring_expenses[key] - satisfied[key]
 
         return RecurringCheckResult(missing=missing, satisfied=satisfied)
 
     def write_budget_sheet(self) -> Path:
         """Persist the reconciliation results to the workbook."""
 
-        writer = BudgetSheetWriter(self.format_keeper.get_template())
+        writer = BudgetSheetWriter(self.config.workbook_path)
         writer.populate(self.expenses, self.config.month)
-        return writer.target_path
+        return self.config.workbook_path
 
 
 class PieChartBuilder:
